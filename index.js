@@ -3,7 +3,7 @@ const app = express();
 const cors = require("cors")
 const dotenv = require("dotenv")
 dotenv.config()
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const port = process.env.PORT || 5000;
 
 
@@ -32,7 +32,22 @@ async function run() {
 
     const database = client.db("hireloop");
     const jobCollection = database.collection("jobs");
+    const companyCollection = database.collection("companies");
+    const usersCollection = database.collection("user");
+    const jobApplicationCollection = database.collection("jobApplications")
    
+    app.get("/api/users", async(req,res)=>{
+        const cursor = usersCollection.find().skip(7)
+        const users = await cursor.toArray();
+        res.send(users)
+    })
+  
+   app.get("/api/companies", async(req,res)=>{
+    const cursor = companyCollection.find().skip(6)
+    const companies = await cursor.toArray();
+    res.send(companies)
+   })
+
   app.get("/api/jobs", async(req,res)=>{
     const query = {};
     if(req.query.companyId){
@@ -45,15 +60,68 @@ async function run() {
     res.send(jobs)
   })
 
+  app.get("/api/jobs/:id", async(req,res)=>{
+    const id = req.params.id;
+    const query = {_id: new ObjectId(id)}
+    const job = await jobCollection.findOne(query);
+    res.send(job)
+  })
+
+  app.get("/api/applications", async(req,res)=>{
+    const query = {};
+    if(req.query.applicantId){
+      query.applicantId = req.query.applicantId
+    }
+    if(req.query.jobId){
+      query.jobId = req.query.jobId
+    }
+    const applications = await jobApplicationCollection.find(query).toArray();
+    res.send(applications)
+  })  
+
+   app.post("/api/applications", async(req,res)=>{
+    const application = req.body;
+    const newApplication = {
+      ...application,
+      createdAt: new Date()
+    }
+    const result = await jobApplicationCollection.insertOne(newApplication)
+    res.send(result)
+   })
+
     app.post("/api/jobs", async(req,res)=>{
       const job = req.body;
-      const result = await jobCollection.insertOne(job)
+      const newJob = {
+        ...job,
+        createdAt: new Date()
+      }
+      const result = await jobCollection.insertOne(newJob)
       res.send(result)
     })
 
 
 
+    // company related api
 
+    app.get("/api/my/companies", async(req,res)=>{
+      const query = {};
+      if(req.query.recruiterId){
+        query.recruiterId = req.query.recruiterId
+      }
+      const result = await companyCollection.findOne(query);
+      console.log(result)
+      res.send(result || {})
+    })
+
+    app.post("/api/companies", async(req,res)=>{
+      const company = req.body;
+      const newCompany ={
+        ...company,
+        createdAt: new Date()
+      }
+      const result = await companyCollection.insertOne(newCompany)
+      res.send(result)
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
