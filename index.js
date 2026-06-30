@@ -10,7 +10,7 @@ const port = process.env.PORT || 5000;
 app.use(cors())
 app.use(express.json())
 
-const uri =process.env.MONGO_URL;
+const uri = process.env.MONGO_URL;
 
 app.get('/', (req, res) => {
   res.send('Hello World!');
@@ -35,61 +35,77 @@ async function run() {
     const companyCollection = database.collection("companies");
     const usersCollection = database.collection("user");
     const jobApplicationCollection = database.collection("jobApplications")
-   
-    app.get("/api/users", async(req,res)=>{
-        const cursor = usersCollection.find().skip(7)
-        const users = await cursor.toArray();
-        res.send(users)
+    const planCollection = database.collection("plans")
+    const subscriptionCollection = database.collection("subscription")
+
+    app.get("/api/users", async (req, res) => {
+      const cursor = usersCollection.find().skip(7)
+      const users = await cursor.toArray();
+      res.send(users)
     })
+
+    // plans
+    app.get("/api/plans", async (req, res) => {
+      const query = {};
+      if (req.query.plan_id) {
+        query.plan_id = req.query.plan_id
+      }
+      const plans = await planCollection.find(query).toArray();
+      res.send(plans)
+    })
+
+    app.get("/api/companies", async (req, res) => {
+      const cursor = companyCollection.find()
+      const companies = await cursor.toArray();
+      res.send(companies)
+    })
+
+    app.get("/api/jobs", async (req, res) => {
+      const query = {};
+      if (req.query.companyId) {
+        query.companyId = req.query.companyId
+      }
+      if (req.query.strict) {
+        query.status = req.query.status
+      }
+      const jobs = await jobCollection.find(query).toArray();
+      res.send(jobs)
+    })
+
+    app.get("/api/jobs/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const job = await jobCollection.findOne(query);
+      res.send(job)
+    })
+
+  app.get("/api/applications", async (req, res) => {
+  const query = {};
   
-   app.get("/api/companies", async(req,res)=>{
-    const cursor = companyCollection.find().skip(6)
-    const companies = await cursor.toArray();
-    res.send(companies)
-   })
+  
+  if (req.query.applicantId) {
+    query.applicantId = req.query.applicantId; 
+  }
+  
+  if (req.query.jobId) {
+    query.jobId = req.query.jobId;
+  }
+  
+  const applications = await jobApplicationCollection.find(query).toArray();
+  res.send(applications);
+});
 
-  app.get("/api/jobs", async(req,res)=>{
-    const query = {};
-    if(req.query.companyId){
-      query.companyId = req.query.companyId
-    }
-    if(req.query.strict){
-      query.status = req.query.status
-    }
-    const jobs = await jobCollection.find(query).toArray();
-    res.send(jobs)
-  })
+    app.post("/api/applications", async (req, res) => {
+      const application = req.body;
+      const newApplication = {
+        ...application,
+        createdAt: new Date()
+      }
+      const result = await jobApplicationCollection.insertOne(newApplication)
+      res.send(result)
+    })
 
-  app.get("/api/jobs/:id", async(req,res)=>{
-    const id = req.params.id;
-    const query = {_id: new ObjectId(id)}
-    const job = await jobCollection.findOne(query);
-    res.send(job)
-  })
-
-  app.get("/api/applications", async(req,res)=>{
-    const query = {};
-    if(req.query.applicantId){
-      query.applicantId = req.query.applicantId
-    }
-    if(req.query.jobId){
-      query.jobId = req.query.jobId
-    }
-    const applications = await jobApplicationCollection.find(query).toArray();
-    res.send(applications)
-  })  
-
-   app.post("/api/applications", async(req,res)=>{
-    const application = req.body;
-    const newApplication = {
-      ...application,
-      createdAt: new Date()
-    }
-    const result = await jobApplicationCollection.insertOne(newApplication)
-    res.send(result)
-   })
-
-    app.post("/api/jobs", async(req,res)=>{
+    app.post("/api/jobs", async (req, res) => {
       const job = req.body;
       const newJob = {
         ...job,
@@ -99,13 +115,45 @@ async function run() {
       res.send(result)
     })
 
+    // subscription
+// subscription
+    app.post("/api/subscription", async (req, res) => {
+      try {
+        const data = req.body;
+        
+        // ১. সাবস্ক্রিপশন কালেকশনে পেমেন্টের ডিটেইলস সেভ করা
+        const subInfo = {
+          ...data,
+          createdAt: new Date()
+        };
+        const result = await subscriptionCollection.insertOne(subInfo);
+
+        // ২. ইউজার কালেকশনে ইউজারের প্ল্যান স্ট্যাটাস আপডেট করা
+        const filter = { email: data.email }; // ✅ ফ্রন্টএন্ডের সাথে মিলিয়ে ছোট হাতের 'email'
+        const updatedData = {
+          $set: {
+            plan: data.planId
+          }
+        };
+
+        // ✅ এখানে usersCollection ব্যবহার করা হয়েছে এবং filter ও updatedData দুটিই পাস করা হয়েছে
+        const updateResult = await usersCollection.updateOne(filter, updatedData);
+
+        // ফ্রন্টএন্ডে রেসপন্স পাঠানো
+        res.send({ success: true, result, updateResult });
+        
+      } catch (error) {
+        console.error("Subscription Error:", error);
+        res.status(500).send({ error: "Internal Server Error", message: error.message });
+      }
+    });
 
 
     // company related api
 
-    app.get("/api/my/companies", async(req,res)=>{
+    app.get("/api/my/companies", async (req, res) => {
       const query = {};
-      if(req.query.recruiterId){
+      if (req.query.recruiterId) {
         query.recruiterId = req.query.recruiterId
       }
       const result = await companyCollection.findOne(query);
@@ -113,9 +161,9 @@ async function run() {
       res.send(result || {})
     })
 
-    app.post("/api/companies", async(req,res)=>{
+    app.post("/api/companies", async (req, res) => {
       const company = req.body;
-      const newCompany ={
+      const newCompany = {
         ...company,
         createdAt: new Date()
       }
@@ -136,5 +184,5 @@ run().catch(console.dir);
 
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
+  console.log(`Example app listening on port ${port}`)
 });
